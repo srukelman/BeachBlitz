@@ -5,26 +5,35 @@
 package frc.robot;
 
 import edu.wpi.first.wpilibj.TimedRobot;
-import edu.wpi.first.wpilibj.Timer;
+import edu.wpi.first.wpilibj.XboxController;
+import edu.wpi.first.wpilibj.CounterBase.EncodingType;
+import edu.wpi.first.wpilibj.shuffleboard.BuiltInLayouts;
+import edu.wpi.first.wpilibj.shuffleboard.Shuffleboard;
+import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardComponent;
+import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardTab;
 import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
-import edu.wpi.first.wpilibj.I2C;
-import edu.wpi.first.wpilibj.util.Color;
+
+import com.ctre.phoenix.motorcontrol.ControlMode;
 import com.ctre.phoenix.motorcontrol.can.TalonSRX;
 import com.ctre.phoenix.motorcontrol.can.VictorSPX;
+import com.revrobotics.CANSparkMax;
+import com.revrobotics.RelativeEncoder;
+import com.revrobotics.SparkMaxPIDController;
+import com.revrobotics.CANSparkMaxLowLevel.MotorType;
+
+import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableEntry;
 import edu.wpi.first.networktables.NetworkTableInstance;
-//import javax.swing.plaf.basic.BasicInternalFrameTitlePane.SystemMenuBar;
-import com.ctre.phoenix.motorcontrol.ControlMode;
+import edu.wpi.first.wpilibj.CAN;
+import edu.wpi.first.wpilibj.Compressor;
 import edu.wpi.first.wpilibj.Joystick;
-import edu.wpi.first.wpilibj.AnalogInput;
-import edu.wpi.first.wpilibj.Counter;
-import com.revrobotics.ColorSensorV3;
-import com.revrobotics.ColorMatchResult;
-import com.revrobotics.ColorMatch;
-import edu.wpi.first.wpilibj.XboxController;
-//import edu.wpi.first.wpilibj.GenericHID.*;
+import edu.wpi.first.wpilibj.PneumaticsModuleType;
+import edu.wpi.first.wpilibj.Solenoid;
+import edu.wpi.first.wpilibj.DoubleSolenoid;
+import edu.wpi.first.wpilibj.Encoder;
+
 
 /**
  * The VM is configured to automatically run this class, and to call the functions corresponding to
@@ -37,22 +46,57 @@ public class Robot extends TimedRobot {
   private static final String kCustomAuto = "My Auto";
   private String m_autoSelected;
   private final SendableChooser<String> m_chooser = new SendableChooser<>();
-  private VictorSPX LDriveV1 = new VictorSPX(6); //1st Left Drive Motor
-  private VictorSPX LDriveV2 = new VictorSPX(7); //2nd Left Drive Motor
-  private VictorSPX RDriveV1 = new VictorSPX(2); //1st Right Drive Motor
-  private VictorSPX RDriveV2 = new VictorSPX(1); //2nd Right Drive Motor
-  //private VictorSPX Intake = new VictorSPX(); //Intake Motor
-  //private VictorSPX ConveyorBelt = new VictorSPX(); //Conveyor Belt Motor
-  //private VictorSPX Flywheel = new VictorSPX(); //Flywheel Motor
-  private XboxController xbox; // XBOX Controller
-  private final I2C.Port i2cPort = I2C.Port.kOnboard; //Color Sensor Port Object
-  private final ColorSensorV3 m_colorSensor = new ColorSensorV3(i2cPort); //Color Sensor Object
-  private final ColorMatch m_colorMatcher = new ColorMatch(); //Color Matcher Object (matches Colors with Color Sensor Output)
-  private final Color blue = Color.kBlue; //The Color Blue
-  private final Color red = Color.kRed; //The Color Red
-  private Counter m_encoder_1; //Left Wheel Rotation Counter
-  private Counter m_encoder_2; //Right Wheel Rotation Counter
-  //private String previousColor = ""; //useless atm
+  Compressor c;
+  Solenoid dogShifter;
+  Solenoid intakeSolenoid;
+  TalonSRX LeftMaster = new TalonSRX(1);
+  TalonSRX RightMaster = new TalonSRX(2);
+  VictorSPX LeftSlave1 = new VictorSPX(5);
+  VictorSPX LeftSlave2 = new VictorSPX(8);
+  VictorSPX RightSlave1 = new VictorSPX(6);
+  VictorSPX RightSlave2 = new VictorSPX(4);
+  TalonSRX intakeMotor = new TalonSRX(3);
+  TalonSRX lowerHopper = new TalonSRX(0);
+  VictorSPX upperHopper = new VictorSPX(7);
+  VictorSPX feed = new VictorSPX(2);
+  CANSparkMax leftNeo = new CANSparkMax(1, MotorType.kBrushless);
+  CANSparkMax rightNeo = new CANSparkMax(0, MotorType.kBrushless);
+  SparkMaxPIDController leftPID = leftNeo.getPIDController();
+  SparkMaxPIDController rightPID = rightNeo.getPIDController();
+  RelativeEncoder leftNeoEncoder = leftNeo.getEncoder();
+  RelativeEncoder rightNeoEncoder = rightNeo.getEncoder();
+  double kP, kI, kD, kIz, kFF, kMaxOutput, kMinOutput, maxRPM;
+  TalonSRX hoodMotor = new TalonSRX(9);
+  double hoodPosition = hoodMotor.getSelectedSensorPosition();
+  double hopperSpeed = 0.4;
+  double intakeSpeed = 0.4;
+  XboxController xbox;
+  NetworkTable table = NetworkTableInstance.getDefault().getTable("limelight");
+NetworkTableEntry ty = table.getEntry("ty");
+NetworkTableEntry tx = table.getEntry("tx");
+NetworkTableEntry tv = table.getEntry("tv");
+Encoder leftEncoder, rightEncoder;
+double targetOffsetAngle_Vertical = ty.getDouble(0.0);
+
+// how many degrees back is your limelight rotated from perfectly vertical?
+double limelightMountAngleDegrees = 45.0;
+
+// distance from the center of the Limelight lens to the floor
+double limelightLensHeightInches = 39.0;
+
+// distance from the target to the floor
+double goalHeightInches = 92.0;
+PIDController limeController = new PIDController(.04, .001, .00);
+
+double angleToGoalDegrees = limelightMountAngleDegrees + targetOffsetAngle_Vertical;
+double angleToGoalRadians = angleToGoalDegrees * (Math.PI / 180.0);
+double leftMax = 0;
+double rightMax = 0;
+ShuffleboardTab tab = Shuffleboard.getTab("BB");
+
+//calculate distance
+double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeightInches)/Math.tan(angleToGoalRadians);
+
   /**
    * This function is run when the robot is first started up and should be used for any
    * initialization code.
@@ -62,23 +106,28 @@ public class Robot extends TimedRobot {
     m_chooser.setDefaultOption("Default Auto", kDefaultAuto);
     m_chooser.addOption("My Auto", kCustomAuto);
     SmartDashboard.putData("Auto choices", m_chooser);
-    //js1 = new Joystick(0);
-    //js2 = new Joystick(1);
-    xbox = new XboxController(2);//XBOX Controller is the 3rd controller after the 2 joysticks
-    m_colorMatcher.addColorMatch(blue); //adds the blue profile to the color matcher
-    m_colorMatcher.addColorMatch(red); // adds the red profile to the color matcher
-    m_encoder_1 = new Counter(); // instantiates a new counter for the first encoder
-    m_encoder_1.setUpSource(2);
-    m_encoder_1.setUpDownCounterMode();
-    m_encoder_1.setDistancePerPulse(Math.PI*6); //distance per pulse PI*diameter of wheel (6" in this case)
-    m_encoder_1.setMaxPeriod(.2); //max period to determine if stopped
-    m_encoder_1.reset();
-    m_encoder_2 = new Counter(); //instantiates a new counter for the second encoder
-    m_encoder_2.setUpSource(3);
-    m_encoder_2.setUpDownCounterMode();
-    m_encoder_2.setDistancePerPulse(Math.PI*6); //distance per pulse PI*diameter of wheel (6" in this case)
-    m_encoder_2.setMaxPeriod(.2); //max period to determine if stopped
-    m_encoder_2.reset();
+    c = new Compressor(1, PneumaticsModuleType.CTREPCM);
+    xbox = new XboxController(1);
+    rightEncoder = new Encoder(0,1 , true,EncodingType.k4X);
+    leftEncoder = new Encoder(8,9, false, EncodingType.k4X);
+    dogShifter = new Solenoid(1, PneumaticsModuleType.CTREPCM, 0);
+    intakeSolenoid = new Solenoid(1, PneumaticsModuleType.CTREPCM, 1);
+    LeftSlave1.follow(LeftMaster);
+    LeftSlave2.follow(LeftMaster);
+    RightSlave1.follow(RightMaster);
+    RightSlave2.follow(RightMaster);
+    LeftMaster.setInverted(false);
+    upperHopper.setInverted(true);
+    lowerHopper.setInverted(true);
+    intakeMotor.setInverted(false);
+    kP = 6e-5;
+    kI = 0;
+    kD = 0;
+    kIz = 0;
+    kFF = 0.000015;
+    kMaxOutput = 1;
+    kMinOutput = -1;
+    maxRPM = 5700;
   }
 
   /**
@@ -90,30 +139,9 @@ public class Robot extends TimedRobot {
    */
   @Override
   public void robotPeriodic() {
-    int count1= m_encoder_1.get(); //get the number of encoder counts
-    double dist1 = m_encoder_1.getDistance(); //get the distance the wheel has spun
-    double rate1 = m_encoder_1.getRate(); //get the rate at which the wheel is spinning
-    SmartDashboard.putNumber("Encoder Counts", count1);
-    SmartDashboard.putNumber("Distance", dist1);
-    SmartDashboard.putNumber("Velocity (in/s)", rate1);
-    int count2= m_encoder_2.get(); //get the number of encoder counts
-    double dist2 = m_encoder_2.getDistance(); //get the distance the wheel has spun
-    double rate2 = m_encoder_2.getRate(); //get the rate at which the wheel is spinning
-    SmartDashboard.putNumber("Encoder Counts", count2);
-    SmartDashboard.putNumber("Distance", dist2);
-    SmartDashboard.putNumber("Velocity (in/s)", rate2);
-    Color detectedColor = m_colorSensor.getColor();
-    String colorString; 
-    ColorMatchResult match = m_colorMatcher.matchClosestColor(detectedColor);  
-    if (match.color == blue) {
-      colorString = "Blue";
-    } else if (match.color == red) {
-      colorString = "Red";
-    } else {
-      colorString = "Unknown";
-    }
-    System.out.println(colorString);
-    //previousColor = colorString;
+    SmartDashboard.putBoolean("drivetrain solenoid", dogShifter.get());
+    SmartDashboard.putNumber("hood angle", hoodMotor.getSelectedSensorPosition());
+    SmartDashboard.putBoolean("Target", tv.getDouble(0)==1);
   }
 
   /**
@@ -130,7 +158,7 @@ public class Robot extends TimedRobot {
   public void autonomousInit() {
     m_autoSelected = m_chooser.getSelected();
     // m_autoSelected = SmartDashboard.getString("Auto Selector", kDefaultAuto);
-    System.out.println("Auto selected: " + m_autoSelected);
+    //System.out.println("Auto selected: " + m_autoSelected);
   }
 
   /** This function is called periodically during autonomous. */
@@ -156,29 +184,127 @@ public class Robot extends TimedRobot {
   /** This function is called periodically during operator control. */
   @Override
   public void teleopPeriodic() {
-    if(xbox.getRawAxis(2) >= 0.5){ //checks if trigger is pressed more than halfway (just in case u only press it a lil on accident)
-      LDriveV1.set(ControlMode.PercentOutput, .96*xbox.getRawAxis(1));
-      LDriveV2.set(ControlMode.PercentOutput, .96*xbox.getRawAxis(1));
-    }if(xbox.getRawAxis(2) < 0.5){ //checks if trigger is not pressed more than halfway
-      LDriveV1.set(ControlMode.PercentOutput, 0);
-      LDriveV2.set(ControlMode.PercentOutput, 0);
-    }
-    if(xbox.getRawAxis(3) >= 0.5){// checks if trigger is pressed more than halfway
-      RDriveV1.set(ControlMode.PercentOutput, 1*xbox.getRawAxis(5));
-      RDriveV2.set(ControlMode.PercentOutput, 1*xbox.getRawAxis(5));
-    }if(xbox.getRawAxis(3) < 0.5){// checks if trigger is not pressed more than halfway
-      RDriveV1.set(ControlMode.PercentOutput, 0);
-      RDriveV2.set(ControlMode.PercentOutput, 0);
-    }
+    //Stick trigger --> shift drive
+    //xbox left bumper --> extend intake
+    //xbox right bumper --> run hopper
+    //xbox B button --> drive intake
+    //right trigger --> drive neos
 
-    //intake controllers
-    if(xbox.getAButtonPressed()){
-      //turn on
+    SmartDashboard.putBoolean("Conpressor On", c.enabled());
+    if(c.enabled()){
+      if(c.getPressureSwitchValue()){
+        c.disable();
+      }
     }
-    if(xbox.getBButtonPressed()){
-      //turn off
+    if(xbox.getLeftBumperPressed()){
+      intakeSolenoid.toggle();
+    }
+    if(xbox.getRightBumper()){
+      lowerHopper.set(ControlMode.PercentOutput, hopperSpeed);
+      upperHopper.set(ControlMode.PercentOutput, hopperSpeed);
+    }
+    else{
+      lowerHopper.set(ControlMode.PercentOutput, 0);
+      upperHopper.set(ControlMode.PercentOutput, 0);
+    }
+    if(xbox.getRawAxis(2)>0){
+      intakeMotor.set(ControlMode.PercentOutput, intakeSpeed);
+    }
+    else{
+      intakeMotor.set(ControlMode.PercentOutput, 0);
+    }
+    // if(xbox.getAButtonPressed()){
+    //   ty = table.getEntry("ty");
+    //   targetOffsetAngle_Vertical = ty.getDouble(10.0);
+
+    //   // how many degrees back is your limelight rotated from perfectly vertical?
+    //   limelightMountAngleDegrees = 45.0;
+
+    //   // distance from the center of the Limelight lens to the floor
+    //   limelightLensHeightInches = 7.5;
+
+    //   // distance from the target to the floor
+    //   goalHeightInches = 92.0;
+
+    //   angleToGoalDegrees = limelightMountAngleDegrees + targetOffsetAngle_Vertical;
+    //   angleToGoalRadians = angleToGoalDegrees * (Math.PI / 180.0);
+    //   System.out.println(angleToGoalDegrees);
+    //   distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeightInches)/Math.tan(angleToGoalRadians);
+    //   System.out.println(distanceFromLimelightToGoalInches);
+    // }
+    if(xbox.getXButtonPressed()){
+      c.disable();
+    }
+    if(xbox.getYButtonPressed()){
+      c.enableAnalog(100, 120);
+      c.enableDigital();
+    }
+    if(xbox.getStartButton()){
+      ty = table.getEntry("ty");
+      double verticalOffset = ty.getDouble(0.0);
+      double angle = (verticalOffset+50)*(3.14159/180);
+      double distanceFromLimelightToGoalInches = (104-29.5)/Math.tan(angle);
+      SmartDashboard.putNumber("distance", distanceFromLimelightToGoalInches);
+    }
+    else{
+      double speed, turn;
+       if(xbox.getRawAxis(1) >= .1 || xbox.getRawAxis(1) <= -.1){
+        speed = xbox.getRawAxis(1) * xbox.getRawAxis(1) * .85;
+        speed = (xbox.getRawAxis(1) < 0)?(speed * -1):speed;
+        turn = .15 * xbox.getRawAxis(4);
+        LeftMaster.set(ControlMode.PercentOutput, -(speed+turn));
+        RightMaster.set(ControlMode.PercentOutput, (speed-turn));
+       }else if(xbox.getRawAxis(4) >= .1 || xbox.getRawAxis(4) <= -.1){
+        turn = xbox.getRawAxis(4) * xbox.getRawAxis(4) * .65;
+        turn = (xbox.getRawAxis(4) < 0)?(turn * -1):turn;
+        LeftMaster.set(ControlMode.PercentOutput, turn);
+        RightMaster.set(ControlMode.PercentOutput, turn);
+       }
+       else{
+         LeftMaster.set(ControlMode.PercentOutput, 0);
+         RightMaster.set(ControlMode.PercentOutput, 0);
+       }
+       if(leftEncoder.getRate() > leftMax){
+        leftMax  = leftEncoder.getRate();
+       }
+       if(rightEncoder.getRate() > rightMax){
+        rightMax = rightEncoder.getRate();
+       }
+    }
+    if(xbox.getBackButton()){
+        PIDController hPidController = new PIDController(0.0008, 0, 0);
+        hoodMotor.set(ControlMode.PercentOutput, hPidController.calculate(hoodMotor.getSelectedSensorPosition(), SmartDashboard.getNumber("HOOD TARGET", 0)));
+    }else{
+      hoodMotor.set(ControlMode.PercentOutput, 0);
     }
     
+    if(xbox.getRawAxis(3)> 0){
+      double rpm = (leftNeo.getEncoder().getVelocity()-rightNeo.getEncoder().getVelocity())/2;
+      double linearSpeed = (rpm*4*3.1415/12)/60;
+      //PIDController neoPID = new PIDController(.05, 0, 0);
+      // if(tv.getDouble(0)==1){
+      //   ty = table.getEntry("ty");
+      //   double verticalOffset = ty.getDouble(0.0);
+      //   double angle = (verticalOffset+50)*(3.14159/180);
+      //   distanceFromLimelightToGoalInches = (104-29.5)/Math.tan(angle);
+      //   double[] targets = getTargetRPM(distanceFromLimelightToGoalInches);
+      //   double targetRPM = targets[0];
+      //   double targetAngle = tar
+      // }
+      double feetPerSecond = SmartDashboard.getNumber("FLYWHEEL TARGET", 0);
+      
+      leftNeo.set(1);
+      rightNeo.set(-1);
+    }
+    else{
+      leftNeo.set(0);
+      rightNeo.set(0);
+    }
+    if(xbox.getAButton()){
+      feed.set(ControlMode.PercentOutput, .5);
+    }else{
+      feed.set(ControlMode.PercentOutput, 0);
+    }    
   }
 
   /** This function is called once when the robot is disabled. */
@@ -196,4 +322,46 @@ public class Robot extends TimedRobot {
   /** This function is called periodically during test mode. */
   @Override
   public void testPeriodic() {}
+
+  /** This function is called once when the robot is first started up. */
+  @Override
+  public void simulationInit() {}
+
+  /** This function is called periodically whilst in simulation. */
+  @Override
+  public void simulationPeriodic() {}
+
+  public double[] getTargetRPM(double distance){
+    if(distance <= 5){
+      return new double[]{FPSTORPM(22), 23.6, 7.6, 88d, 0};
+    }
+    if(distance <=10){
+      return new double[]{FPSTORPM(25), 6.5, 8.2, 80d, 0};
+    }
+    if(distance <= 14){
+      return new double[]{FPSTORPM(27), 5.6, 4.7, 70.3, 8.9};
+    }
+    if(distance <= 16){
+      return new double[]{FPSTORPM(28), 40d, 15.3, 73d, 10.5};
+    }
+    if(distance <= 18){
+      return new double[]{FPSTORPM(29), 28.3, 10.5, 58, 17.7};
+    }
+    if(distance <= 20){
+      return new double[]{FPSTORPM(30), 28d, 9.4, 64.7, 17d};
+    }
+    if(distance <= 22){
+      return new double[]{FPSTORPM(31), 20.8, 6.8, 61d, 20d};
+    }
+    if(distance <= 24){
+      return new double[] {FPSTORPM(32), 58d, 29.6, 8.35, -3.5};
+    }
+    return new double[]{0,0,0,0};
+  }
+  public double FPSTORPM(double fps){
+    return ((fps * 60 * 12)/3.14159)/4;
+  }
+  public double hoodReadingtoDegrees(double hoodReading){
+    return 5d+((hoodMotor.getSelectedSensorPosition()/7672d)*40d);
+  }
 }
