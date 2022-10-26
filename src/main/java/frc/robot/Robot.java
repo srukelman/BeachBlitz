@@ -84,6 +84,7 @@ double hoodTarget = 5;
 double targetRPM = 0;
 ShuffleboardTab tab = Shuffleboard.getTab("BB");
 Joystick js = new Joystick(0);
+double setPoint = 9000;
 
 //calculate distance
 double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeightInches)/Math.tan(angleToGoalRadians);
@@ -206,7 +207,7 @@ double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeig
     else{
       double speed, turn;
        if(xbox.getRawAxis(1) >= .1 || xbox.getRawAxis(1) <= -.1){
-        speed = xbox.getRawAxis(1) * xbox.getRawAxis(1) * .85;
+        speed = xbox.getRawAxis(1) * xbox.getRawAxis(1) * .75;
         speed = (xbox.getRawAxis(1) < 0)?(speed * -1):speed;
         turn = .15 * xbox.getRawAxis(4);
         LeftMaster.set(ControlMode.PercentOutput, -(speed+turn));
@@ -238,9 +239,29 @@ double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeig
       double rpm = leftNeo.getEncoder().getVelocity();
       SmartDashboard.putNumber("Actual RPM", rpm);
       feetPerSecond = SmartDashboard.getNumber("FLYWHEEL TARGET", 0);
-      double setPoint = targetRPM;
-      SmartDashboard.putNumber("setpoint", setPoint);
-      leftPID.setReference(setPoint, ControlType.kVelocity);
+      if(tv.getDouble(0)==1){
+        double horizontalOffset = tx.getDouble(0);
+        if(horizontalOffset >=.05 || horizontalOffset <= -.05){
+          LeftMaster.set(ControlMode.PercentOutput, .75*limeController.calculate(horizontalOffset, 0));
+          RightMaster.set(ControlMode.PercentOutput, .75*limeController.calculate(horizontalOffset, 0));
+          setPoint = 9000;
+        }else{
+          LeftMaster.set(ControlMode.PercentOutput, 0);
+          RightMaster.set(ControlMode.PercentOutput,0);
+          ty = table.getEntry("ty");
+          double verticalOffset = ty.getDouble(0.0);
+          double angle = (verticalOffset+40)*(3.14159/180);
+          double distanceFromLimelightToGoalInches = (104-29.5)/Math.tan(angle);
+          SmartDashboard.putNumber("distance", distanceFromLimelightToGoalInches);
+          hoodTarget = distanceToHoodAngle(distanceFromLimelightToGoalInches);
+          targetRPM = distanceToRPM(distanceFromLimelightToGoalInches);
+          if(rpm < targetRPM){
+            setPoint += 100;
+          }
+          SmartDashboard.putNumber("setpoint", setPoint);
+          leftPID.setReference(setPoint, ControlType.kVelocity);
+        }
+      }
     }
     else{
       leftNeo.set(0);
@@ -277,5 +298,11 @@ double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeig
       return 0;
     }
     return (degrees-5d)*7672d/45d;
+  }
+  public double distanceToRPM(double distance){
+    return 1000*(.296*Math.tan((distance - 10)/6)+3.45);
+  }
+  public double distanceToHoodAngle(double distance){
+    return (20/(1+ Math.pow(Math.E, (-.793*(distance - 10)))))+25;
   }
 }
