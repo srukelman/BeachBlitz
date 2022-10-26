@@ -74,6 +74,7 @@ double limelightLensHeightInches = 39.0;
 // distance from the target to the floor
 double goalHeightInches = 92.0;
 PIDController limeController = new PIDController(.04, .001, .00);
+PIDController hPidController = new PIDController(0.0008, 0, 0);
 
 double angleToGoalDegrees = limelightMountAngleDegrees + targetOffsetAngle_Vertical;
 double angleToGoalRadians = angleToGoalDegrees * (Math.PI / 180.0);
@@ -229,12 +230,12 @@ double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeig
         rightMax = rightEncoder.getRate();
        }
     }
-    if(xbox.getBackButton()){
-        PIDController hPidController = new PIDController(0.0008, 0, 0);
-        hoodMotor.set(ControlMode.PercentOutput, hPidController.calculate(hoodMotor.getSelectedSensorPosition(), degreesToHoodReading(hoodTarget)));
-    }else{
-      hoodMotor.set(ControlMode.PercentOutput, 0);
-    }
+    // if(xbox.getBackButton()){
+    //     PIDController hPidController = new PIDController(0.0008, 0, 0);
+    //     hoodMotor.set(ControlMode.PercentOutput, hPidController.calculate(hoodMotor.getSelectedSensorPosition(), degreesToHoodReading(hoodTarget)));
+    // }else{
+    //   hoodMotor.set(ControlMode.PercentOutput, 0);
+    // }
     if(xbox.getRawAxis(3)> 0){
       double rpm = leftNeo.getEncoder().getVelocity();
       SmartDashboard.putNumber("Actual RPM", rpm);
@@ -245,6 +246,8 @@ double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeig
           LeftMaster.set(ControlMode.PercentOutput, .75*limeController.calculate(horizontalOffset, 0));
           RightMaster.set(ControlMode.PercentOutput, .75*limeController.calculate(horizontalOffset, 0));
           setPoint = 9000;
+          hoodMotor.set(ControlMode.PercentOutput, 0);
+          leftNeo.set(0);
         }else{
           LeftMaster.set(ControlMode.PercentOutput, 0);
           RightMaster.set(ControlMode.PercentOutput,0);
@@ -255,22 +258,34 @@ double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeig
           SmartDashboard.putNumber("distance", distanceFromLimelightToGoalInches);
           hoodTarget = distanceToHoodAngle(distanceFromLimelightToGoalInches);
           targetRPM = distanceToRPM(distanceFromLimelightToGoalInches);
-          if(rpm < targetRPM){
+          if(rpm < targetRPM-25){
             setPoint += 100;
+          }else if(rpm > targetRPM+25){
+            setPoint -= 100;
+          }
+          else if(degreesToHoodReading(hoodTarget)-15<=hoodMotor.getSelectedSensorPosition() && degreesToHoodReading(hoodTarget)+15>=hoodMotor.getSelectedSensorPosition()){
+            feed.set(ControlMode.PercentOutput, .5);
           }
           SmartDashboard.putNumber("setpoint", setPoint);
           leftPID.setReference(setPoint, ControlType.kVelocity);
+          if(degreesToHoodReading(hoodTarget)-15>hoodMotor.getSelectedSensorPosition() || degreesToHoodReading(hoodTarget)+15<hoodMotor.getSelectedSensorPosition()){
+            hoodMotor.set(ControlMode.PercentOutput, hPidController.calculate(hoodMotor.getSelectedSensorPosition(), degreesToHoodReading(hoodTarget)));
+          }else{
+            hoodMotor.set(ControlMode.PercentOutput, 0);
+          }
         }
       }
     }
     else{
       leftNeo.set(0);
+      feed.set(ControlMode.PercentOutput, 0);
+      hoodMotor.set(ControlMode.PercentOutput, 0);
     }
-    if(xbox.getAButton()){
-      feed.set(ControlMode.PercentOutput, .5);
-    }else{
-      feed.set(ControlMode.PercentOutput, 0);  
-    }    
+    // if(xbox.getAButton()){
+    //   feed.set(ControlMode.PercentOutput, .5);
+    // }else{
+    //   feed.set(ControlMode.PercentOutput, 0);  
+    // }    
   }
   @Override
   public void disabledInit() {}
