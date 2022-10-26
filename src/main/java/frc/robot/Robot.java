@@ -158,35 +158,44 @@ double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeig
   }
   @Override
   public void teleopPeriodic() {
-    if(xbox.getLeftBumperPressed()){
+    if(intakeSolenoid.get() && js.getRawButtonPressed(3)){
       intakeSolenoid.toggle();
     }
-    if(js.getTriggerPressed()){
-      if(hoodTarget!= 50){
-        hoodTarget +=5;
-      }    
+    else if(js.getRawButtonPressed(4) && !intakeSolenoid.get()){
+      intakeSolenoid.toggle();
     }
-    if(js.getRawButtonPressed(2)){
-      if(hoodTarget!=5){
-       hoodTarget -=5;
-      }
-    }
-    if(js.getRawButtonPressed(3)){
-      targetRPM+=100;
-    }
-    if(js.getRawButtonPressed(4)){
-      targetRPM-=100;
-    }
-    if(xbox.getRightBumper()){
+    // if(js.getTriggerPressed()){
+    //   if(hoodTarget!= 50){
+    //     hoodTarget +=5;
+    //   }    
+    // }
+    // if(js.getRawButtonPressed(2)){
+    //   if(hoodTarget!=5){
+    //    hoodTarget -=5;
+    //   }
+    // }
+    // if(js.getRawButtonPressed(3)){
+    //   targetRPM+=100;
+    // }
+    // if(js.getRawButtonPressed(4)){
+    //   targetRPM-=100;
+    // }
+    if(js.getRawButton(2)){
       lowerHopper.set(ControlMode.PercentOutput, hopperSpeed);
       upperHopper.set(ControlMode.PercentOutput, hopperSpeed);
+    }else if(js.getRawButton(5)){
+      lowerHopper.set(ControlMode.PercentOutput, -hopperSpeed);
+      upperHopper.set(ControlMode.PercentOutput, -hopperSpeed);
     }
     else{
       lowerHopper.set(ControlMode.PercentOutput, 0);
       upperHopper.set(ControlMode.PercentOutput, 0);
     }
-    if(xbox.getRawAxis(2)>0){
+    if(js.getTrigger()){
       intakeMotor.set(ControlMode.PercentOutput, intakeSpeed);
+    }
+    else if(js.getRawButton(6)){
+      intakeMotor.set(ControlMode.PercentOutput, -intakeSpeed);
     }
     else{
       intakeMotor.set(ControlMode.PercentOutput, 0);
