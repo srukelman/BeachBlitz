@@ -1,20 +1,12 @@
-// Copyright (c) FIRST and other WPILib contributors.
-// Open Source Software; you can modify and/or share it under the terms of
-// the WPILib BSD license file in the root directory of this project.
-
 package frc.robot;
 
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.XboxController;
 import edu.wpi.first.wpilibj.CounterBase.EncodingType;
-import edu.wpi.first.wpilibj.shuffleboard.BuiltInLayouts;
 import edu.wpi.first.wpilibj.shuffleboard.Shuffleboard;
-import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardComponent;
 import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardTab;
 import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
-
-import javax.swing.RowFilter.ComparisonType;
 
 import com.ctre.phoenix.motorcontrol.ControlMode;
 import com.ctre.phoenix.motorcontrol.can.TalonSRX;
@@ -22,27 +14,20 @@ import com.ctre.phoenix.motorcontrol.can.VictorSPX;
 import com.revrobotics.CANSparkMax;
 import com.revrobotics.RelativeEncoder;
 import com.revrobotics.SparkMaxPIDController;
+import com.revrobotics.CANSparkMax.IdleMode;
+import com.revrobotics.CANSparkMax.ControlType;
 import com.revrobotics.CANSparkMaxLowLevel.MotorType;
 
 import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableEntry;
 import edu.wpi.first.networktables.NetworkTableInstance;
-import edu.wpi.first.wpilibj.CAN;
 import edu.wpi.first.wpilibj.Compressor;
 import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.PneumaticsModuleType;
 import edu.wpi.first.wpilibj.Solenoid;
-import edu.wpi.first.wpilibj.DoubleSolenoid;
 import edu.wpi.first.wpilibj.Encoder;
 
-
-/**
- * The VM is configured to automatically run this class, and to call the functions corresponding to
- * each mode, as described in the TimedRobot documentation. If you change the name of this class or
- * the package after creating this project, you must also update the build.gradle file in the
- * project.
- */
 public class Robot extends TimedRobot {
   private static final String kDefaultAuto = "Default";
   private static final String kCustomAuto = "My Auto";
@@ -62,11 +47,11 @@ public class Robot extends TimedRobot {
   VictorSPX upperHopper = new VictorSPX(7);
   VictorSPX feed = new VictorSPX(2);
   CANSparkMax leftNeo = new CANSparkMax(1, MotorType.kBrushless);
-  CANSparkMax rightNeo = new CANSparkMax(0, MotorType.kBrushless);
+  CANSparkMax rightNeo = new CANSparkMax(2, MotorType.kBrushless);
   SparkMaxPIDController leftPID = leftNeo.getPIDController();
-  SparkMaxPIDController rightPID = rightNeo.getPIDController();
   RelativeEncoder leftNeoEncoder = leftNeo.getEncoder();
   RelativeEncoder rightNeoEncoder = rightNeo.getEncoder();
+ 
   double kP, kI, kD, kIz, kFF, kMaxOutput, kMinOutput, maxRPM;
   TalonSRX hoodMotor = new TalonSRX(9);
   double hoodPosition = hoodMotor.getSelectedSensorPosition();
@@ -94,15 +79,15 @@ double angleToGoalDegrees = limelightMountAngleDegrees + targetOffsetAngle_Verti
 double angleToGoalRadians = angleToGoalDegrees * (Math.PI / 180.0);
 double leftMax = 0;
 double rightMax = 0;
+double feetPerSecond = 0;
+double hoodTarget = 5;
+double targetRPM = 0;
 ShuffleboardTab tab = Shuffleboard.getTab("BB");
+Joystick js = new Joystick(0);
 
 //calculate distance
 double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeightInches)/Math.tan(angleToGoalRadians);
 
-  /**
-   * This function is run when the robot is first started up and should be used for any
-   * initialization code.
-   */
   @Override
   public void robotInit() {
     m_chooser.setDefaultOption("Default Auto", kDefaultAuto);
@@ -122,46 +107,48 @@ double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeig
     upperHopper.setInverted(true);
     lowerHopper.setInverted(true);
     intakeMotor.setInverted(false);
+    leftNeo.setIdleMode(IdleMode.kCoast);
+    rightNeo.setIdleMode(IdleMode.kCoast);
+    rightNeo.follow(leftNeo, true);
     kP = 6e-5;
     kI = 0;
     kD = 0;
     kIz = 0;
     kFF = 0.000015;
-    kMaxOutput = 1;
-    kMinOutput = -1;
+    kMaxOutput = .85;
+    kMinOutput = -.85;
     maxRPM = 5700;
+    leftPID.setP(kP);
+    leftPID.setI(kI);
+    leftPID.setD(kD);
+    leftPID.setIZone(kIz);
+    leftPID.setFF(kFF);
+    leftPID.setOutputRange(kMinOutput, kMaxOutput);
+    leftNeo.burnFlash();
+    rightNeo.burnFlash();
   }
 
-  /**
-   * This function is called every robot packet, no matter the mode. Use this for items like
-   * diagnostics that you want ran during disabled, autonomous, teleoperated and test.
-   *
-   * <p>This runs after the mode specific periodic functions, but before LiveWindow and
-   * SmartDashboard integrated updating.
-   */
   @Override
   public void robotPeriodic() {
     SmartDashboard.putBoolean("drivetrain solenoid", dogShifter.get());
+    SmartDashboard.putNumber("HOOD TARGET", hoodTarget);
     SmartDashboard.putNumber("hood angle", hoodMotor.getSelectedSensorPosition());
     SmartDashboard.putBoolean("Target", tv.getDouble(0)==1);
+    SmartDashboard.putNumber("FLYWHEEL TARGET", targetRPM);
+    SmartDashboard.putNumber("P Gain", kP);
+    SmartDashboard.putNumber("I Gain", kI);
+    SmartDashboard.putNumber("D Gain", kD);
+    SmartDashboard.putNumber("I Zone", kIz);
+    SmartDashboard.putNumber("Feed Forward", kFF);
+    SmartDashboard.putNumber("Max Output", kMaxOutput);
+    SmartDashboard.putNumber("Min Output", kMinOutput);
+    SmartDashboard.putBoolean("Conpressor On", c.enabled());
   }
   @Override
   public void autonomousInit() {
-    m_autoSelected = m_chooser.getSelected();
-    // m_autoSelected = SmartDashboard.getString("Auto Selector", kDefaultAuto);
-    //System.out.println("Auto selected: " + m_autoSelected);
   }
   @Override
   public void autonomousPeriodic() {
-    switch (m_autoSelected) {
-      case kCustomAuto:
-        // Put custom auto code here
-        break;
-      case kDefaultAuto:
-      default:
-        // Put default auto code here
-        break;
-    }
   }
   @Override
   public void teleopInit() {
@@ -169,20 +156,24 @@ double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeig
   }
   @Override
   public void teleopPeriodic() {
-    //Stick trigger --> shift drive
-    //xbox left bumper --> extend intake
-    //xbox right bumper --> run hopper
-    //xbox B button --> drive intake
-    //right trigger --> drive neos
-    updatePID();
-    SmartDashboard.putBoolean("Conpressor On", c.enabled());
-    if(c.enabled()){
-      if(c.getPressureSwitchValue()){
-        c.disable();
-      }
-    }
     if(xbox.getLeftBumperPressed()){
       intakeSolenoid.toggle();
+    }
+    if(js.getTriggerPressed()){
+      if(hoodTarget!= 50){
+        hoodTarget +=5;
+      }    
+    }
+    if(js.getRawButtonPressed(2)){
+      if(hoodTarget!=5){
+       hoodTarget -=5;
+      }
+    }
+    if(js.getRawButtonPressed(3)){
+      targetRPM+=100;
+    }
+    if(js.getRawButtonPressed(4)){
+      targetRPM-=100;
     }
     if(xbox.getRightBumper()){
       lowerHopper.set(ControlMode.PercentOutput, hopperSpeed);
@@ -197,25 +188,6 @@ double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeig
     }
     else{
       intakeMotor.set(ControlMode.PercentOutput, 0);
-    }
-    if(xbox.getBButtonPressed()){
-      ty = table.getEntry("ty");
-      targetOffsetAngle_Vertical = ty.getDouble(10.0);
-
-      // how many degrees back is your limelight rotated from perfectly vertical?
-      limelightMountAngleDegrees = 45.0;
-
-      // distance from the center of the Limelight lens to the floor
-      limelightLensHeightInches = 7.5;
-
-      // distance from the target to the floor
-      goalHeightInches = 92.0;
-
-      angleToGoalDegrees = limelightMountAngleDegrees + targetOffsetAngle_Vertical;
-      angleToGoalRadians = angleToGoalDegrees * (Math.PI / 180.0);
-      System.out.println(angleToGoalDegrees);
-      distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeightInches)/Math.tan(angleToGoalRadians);
-      System.out.println(distanceFromLimelightToGoalInches);
     }
     if(xbox.getXButtonPressed()){
       c.disable();
@@ -258,22 +230,20 @@ double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeig
     }
     if(xbox.getBackButton()){
         PIDController hPidController = new PIDController(0.0008, 0, 0);
-        hoodMotor.set(ControlMode.PercentOutput, hPidController.calculate(hoodMotor.getSelectedSensorPosition(), SmartDashboard.getNumber("HOOD TARGET", 0)));
+        hoodMotor.set(ControlMode.PercentOutput, hPidController.calculate(hoodMotor.getSelectedSensorPosition(), degreesToHoodReading(hoodTarget)));
     }else{
       hoodMotor.set(ControlMode.PercentOutput, 0);
     }
     if(xbox.getRawAxis(3)> 0){
-      double rpm = (leftNeo.getEncoder().getVelocity()-rightNeo.getEncoder().getVelocity())/2;
+      double rpm = leftNeo.getEncoder().getVelocity();
       SmartDashboard.putNumber("Actual RPM", rpm);
-      //double linearSpeed = (rpm*4*3.1415/12)/60;
-      double feetPerSecond = SmartDashboard.getNumber("FLYWHEEL TARGET", 0);
-      double setPoint = (FPSTORPM(feetPerSecond)<maxRPM)?FPSTORPM(feetPerSecond):maxRPM;
-      leftPID.setReference(setPoint, CANSparkMax.ControlType.kVelocity);
-      rightPID.setReference(-setPoint, CANSparkMax.ControlType.kVelocity);
+      feetPerSecond = SmartDashboard.getNumber("FLYWHEEL TARGET", 0);
+      double setPoint = targetRPM;
+      SmartDashboard.putNumber("setpoint", setPoint);
+      leftPID.setReference(setPoint, ControlType.kVelocity);
     }
     else{
       leftNeo.set(0);
-      rightNeo.set(0);
     }
     if(xbox.getAButton()){
       feed.set(ControlMode.PercentOutput, .5);
@@ -300,27 +270,12 @@ double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeig
     return ((fps * 60 * 12)/3.14159)/4;
   }
   public double hoodReadingtoDegrees(double hoodReading){
-    return 5d+((hoodMotor.getSelectedSensorPosition()/7672d)*40d);
+    return 5d+((hoodReading/7672d)*45d);
   }
-  public void updatePID(){
-    double p = SmartDashboard.getNumber("P Gain", 0);
-    double i = SmartDashboard.getNumber("I Gain", 0);
-    double d = SmartDashboard.getNumber("D Gain", 0);
-    double iz = SmartDashboard.getNumber("I Zone", 0);
-    double ff = SmartDashboard.getNumber("Feed Forward", 0);
-    double max = SmartDashboard.getNumber("Max Output", 0);
-    double min = SmartDashboard.getNumber("Min Output", 0);
-
-    // if PID coefficients on SmartDashboard have changed, write new values to controller
-    if((p != kP)) { leftPID.setP(p); rightPID.setP(p); kP = p; }
-    if((i != kI)) { leftPID.setI(i); rightPID.setI(i); kI = i; }
-    if((d != kD)) {leftPID.setD(d); rightPID.setD(d); kD = d; }
-    if((iz != kIz)) { leftPID.setIZone(iz); rightPID.setIZone(iz); kIz = iz; }
-    if((ff != kFF)) { leftPID.setFF(ff); rightPID.setFF(ff); kFF = ff; }
-    if((max != kMaxOutput) || (min != kMinOutput)) { 
-      leftPID.setOutputRange(min, max); 
-      rightPID.setOutputRange(min, max); 
-      kMinOutput = min; kMaxOutput = max;
+  public double degreesToHoodReading(double degrees){
+    if(degrees<5){
+      return 0;
     }
+    return (degrees-5d)*7672d/45d;
   }
 }
