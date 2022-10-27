@@ -31,7 +31,7 @@ import edu.wpi.first.wpilibj.Encoder;
 public class Robot extends TimedRobot {
   private static final String kDefaultAuto = "Default";
   private static final String kCustomAuto = "My Auto";
-  private String m_autoSelected;
+  //private String m_autoSelected;
   private final SendableChooser<String> m_chooser = new SendableChooser<>();
   Compressor c;
   Solenoid dogShifter;
@@ -73,7 +73,7 @@ double limelightLensHeightInches = 39.0;
 
 // distance from the target to the floor
 double goalHeightInches = 92.0;
-PIDController limeController = new PIDController(.04, .001, .00);
+PIDController limeController = new PIDController(.07, .003, .001);
 PIDController hPidController = new PIDController(0.0008, 0, 0);
 
 double angleToGoalDegrees = limelightMountAngleDegrees + targetOffsetAngle_Vertical;
@@ -158,44 +158,35 @@ double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeig
   }
   @Override
   public void teleopPeriodic() {
-    if(intakeSolenoid.get() && js.getRawButtonPressed(3)){
+    if(xbox.getLeftBumperPressed()){
       intakeSolenoid.toggle();
     }
-    else if(js.getRawButtonPressed(4) && !intakeSolenoid.get()){
-      intakeSolenoid.toggle();
+    if(js.getTriggerPressed()){
+      if(hoodTarget!= 50){
+        hoodTarget +=5;
+      }    
     }
-    // if(js.getTriggerPressed()){
-    //   if(hoodTarget!= 50){
-    //     hoodTarget +=5;
-    //   }    
-    // }
-    // if(js.getRawButtonPressed(2)){
-    //   if(hoodTarget!=5){
-    //    hoodTarget -=5;
-    //   }
-    // }
-    // if(js.getRawButtonPressed(3)){
-    //   targetRPM+=100;
-    // }
-    // if(js.getRawButtonPressed(4)){
-    //   targetRPM-=100;
-    // }
-    if(js.getRawButton(2)){
+    if(js.getRawButtonPressed(2)){
+      if(hoodTarget!=5){
+       hoodTarget -=5;
+      }
+    }
+    if(js.getRawButtonPressed(3)){
+      targetRPM+=100;
+    }
+    if(js.getRawButtonPressed(4)){
+      targetRPM-=100;
+    }
+    if(xbox.getRightBumper()){
       lowerHopper.set(ControlMode.PercentOutput, hopperSpeed);
       upperHopper.set(ControlMode.PercentOutput, hopperSpeed);
-    }else if(js.getRawButton(5)){
-      lowerHopper.set(ControlMode.PercentOutput, -hopperSpeed);
-      upperHopper.set(ControlMode.PercentOutput, -hopperSpeed);
     }
     else{
       lowerHopper.set(ControlMode.PercentOutput, 0);
       upperHopper.set(ControlMode.PercentOutput, 0);
     }
-    if(js.getTrigger()){
+    if(xbox.getRawAxis(2)>0){
       intakeMotor.set(ControlMode.PercentOutput, intakeSpeed);
-    }
-    else if(js.getRawButton(6)){
-      intakeMotor.set(ControlMode.PercentOutput, -intakeSpeed);
     }
     else{
       intakeMotor.set(ControlMode.PercentOutput, 0);
@@ -214,31 +205,7 @@ double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeig
       double distanceFromLimelightToGoalInches = (104-29.5)/Math.tan(angle);
       SmartDashboard.putNumber("distance", distanceFromLimelightToGoalInches);
     }
-    else{
-      double speed, turn;
-       if(xbox.getRawAxis(1) >= .1 || xbox.getRawAxis(1) <= -.1){
-        speed = xbox.getRawAxis(1) * xbox.getRawAxis(1) * .75;
-        speed = (xbox.getRawAxis(1) < 0)?(speed * -1):speed;
-        turn = .15 * xbox.getRawAxis(4);
-        LeftMaster.set(ControlMode.PercentOutput, -(speed+turn));
-        RightMaster.set(ControlMode.PercentOutput, (speed-turn));
-       }else if(xbox.getRawAxis(4) >= .1 || xbox.getRawAxis(4) <= -.1){
-        turn = xbox.getRawAxis(4) * xbox.getRawAxis(4) * .65;
-        turn = (xbox.getRawAxis(4) < 0)?(turn * -1):turn;
-        LeftMaster.set(ControlMode.PercentOutput, turn);
-        RightMaster.set(ControlMode.PercentOutput, turn);
-       }
-       else{
-         LeftMaster.set(ControlMode.PercentOutput, 0);
-         RightMaster.set(ControlMode.PercentOutput, 0);
-       }
-       if(leftEncoder.getRate() > leftMax){
-        leftMax  = leftEncoder.getRate();
-       }
-       if(rightEncoder.getRate() > rightMax){
-        rightMax = rightEncoder.getRate();
-       }
-    }
+    
     // if(xbox.getBackButton()){
     //     PIDController hPidController = new PIDController(0.0008, 0, 0);
     //     hoodMotor.set(ControlMode.PercentOutput, hPidController.calculate(hoodMotor.getSelectedSensorPosition(), degreesToHoodReading(hoodTarget)));
@@ -251,10 +218,10 @@ double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeig
       feetPerSecond = SmartDashboard.getNumber("FLYWHEEL TARGET", 0);
       if(tv.getDouble(0)==1){
         double horizontalOffset = tx.getDouble(0);
-        if(horizontalOffset >=.05 || horizontalOffset <= -.05){
-          LeftMaster.set(ControlMode.PercentOutput, .75*limeController.calculate(horizontalOffset, 0));
-          RightMaster.set(ControlMode.PercentOutput, .75*limeController.calculate(horizontalOffset, 0));
-          setPoint = 9000;
+        if(horizontalOffset >=3 || horizontalOffset <= -3){
+          LeftMaster.set(ControlMode.PercentOutput, -1*limeController.calculate(horizontalOffset, 0));
+          RightMaster.set(ControlMode.PercentOutput, -1*limeController.calculate(horizontalOffset, 0));
+          //setPoint = 9000;
           hoodMotor.set(ControlMode.PercentOutput, 0);
           leftNeo.set(0);
         }else{
@@ -267,12 +234,12 @@ double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeig
           SmartDashboard.putNumber("distance", distanceFromLimelightToGoalInches);
           hoodTarget = distanceToHoodAngle(distanceFromLimelightToGoalInches);
           targetRPM = distanceToRPM(distanceFromLimelightToGoalInches);
-          if(rpm < targetRPM-25){
+          if(rpm < targetRPM-50){
             setPoint += 100;
-          }else if(rpm > targetRPM+25){
-            setPoint -= 100;
+          }else if(rpm > targetRPM+50){
+            setPoint -= 50;
           }
-          else if(degreesToHoodReading(hoodTarget)-15<=hoodMotor.getSelectedSensorPosition() && degreesToHoodReading(hoodTarget)+15>=hoodMotor.getSelectedSensorPosition()){
+          else if((hoodTarget-1)<=hoodReadingtoDegrees(hoodMotor.getSelectedSensorPosition()) && (hoodTarget+1)>=hoodReadingtoDegrees(hoodMotor.getSelectedSensorPosition())){
             feed.set(ControlMode.PercentOutput, .5);
           }
           SmartDashboard.putNumber("setpoint", setPoint);
@@ -289,6 +256,29 @@ double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeig
       leftNeo.set(0);
       feed.set(ControlMode.PercentOutput, 0);
       hoodMotor.set(ControlMode.PercentOutput, 0);
+        double speed, turn;
+         if(xbox.getRawAxis(1) >= .1 || xbox.getRawAxis(1) <= -.1){
+          speed = xbox.getRawAxis(1) * xbox.getRawAxis(1) * .75;
+          speed = (xbox.getRawAxis(1) < 0)?(speed * -1):speed;
+          turn = .15 * xbox.getRawAxis(4);
+          LeftMaster.set(ControlMode.PercentOutput, -(speed+turn));
+          RightMaster.set(ControlMode.PercentOutput, (speed-turn));
+         }else if(xbox.getRawAxis(4) >= .1 || xbox.getRawAxis(4) <= -.1){
+          turn = xbox.getRawAxis(4) * xbox.getRawAxis(4) * .65;
+          turn = (xbox.getRawAxis(4) < 0)?(turn * -1):turn;
+          LeftMaster.set(ControlMode.PercentOutput, turn);
+          RightMaster.set(ControlMode.PercentOutput, turn);
+         }
+         else{
+           LeftMaster.set(ControlMode.PercentOutput, 0);
+           RightMaster.set(ControlMode.PercentOutput, 0);
+         }
+         if(leftEncoder.getRate() > leftMax){
+          leftMax  = leftEncoder.getRate();
+         }
+         if(rightEncoder.getRate() > rightMax){
+          rightMax = rightEncoder.getRate();
+         }
     }
     // if(xbox.getAButton()){
     //   feed.set(ControlMode.PercentOutput, .5);
@@ -324,9 +314,11 @@ double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeig
     return (degrees-5d)*7672d/45d;
   }
   public double distanceToRPM(double distance){
-    return 1000*(.296*Math.tan((distance - 10)/6)+3.45);
+    distance/=12;
+    return (1000*(3+(.13*(distance-3))));
   }
   public double distanceToHoodAngle(double distance){
+    distance/=12;
     return (20/(1+ Math.pow(Math.E, (-.793*(distance - 10)))))+25;
   }
 }
