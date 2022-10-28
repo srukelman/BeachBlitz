@@ -19,6 +19,7 @@ import com.revrobotics.CANSparkMax.ControlType;
 import com.revrobotics.CANSparkMaxLowLevel.MotorType;
 
 import edu.wpi.first.math.controller.PIDController;
+import edu.wpi.first.math.filter.SlewRateLimiter;
 import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableEntry;
 import edu.wpi.first.networktables.NetworkTableInstance;
@@ -86,6 +87,7 @@ double targetRPM = 0;
 ShuffleboardTab tab = Shuffleboard.getTab("BB");
 Joystick js = new Joystick(0);
 double setPoint = 9000;
+SlewRateLimiter filter = new SlewRateLimiter(0.5);
 
 //calculate distance
 double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeightInches)/Math.tan(angleToGoalRadians);
@@ -148,6 +150,8 @@ double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeig
   }
   @Override
   public void autonomousInit() {
+    rightEncoder.setReverseDirection(false);
+    leftEncoder.setReverseDirection(true);
   }
   @Override
   public void autonomousPeriodic() {
@@ -205,13 +209,6 @@ double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeig
       double distanceFromLimelightToGoalInches = (104-29.5)/Math.tan(angle);
       SmartDashboard.putNumber("distance", distanceFromLimelightToGoalInches);
     }
-    
-    // if(xbox.getBackButton()){
-    //     PIDController hPidController = new PIDController(0.0008, 0, 0);
-    //     hoodMotor.set(ControlMode.PercentOutput, hPidController.calculate(hoodMotor.getSelectedSensorPosition(), degreesToHoodReading(hoodTarget)));
-    // }else{
-    //   hoodMotor.set(ControlMode.PercentOutput, 0);
-    // }
     if(xbox.getRawAxis(3)> 0){
       double rpm = leftNeo.getEncoder().getVelocity();
       SmartDashboard.putNumber("Actual RPM", rpm);
@@ -219,9 +216,8 @@ double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeig
       if(tv.getDouble(0)==1){
         double horizontalOffset = tx.getDouble(0);
         if(horizontalOffset >=3 || horizontalOffset <= -3){
-          LeftMaster.set(ControlMode.PercentOutput, -1*limeController.calculate(horizontalOffset, 0));
-          RightMaster.set(ControlMode.PercentOutput, -1*limeController.calculate(horizontalOffset, 0));
-          //setPoint = 9000;
+          LeftMaster.set(ControlMode.PercentOutput, filter.calculate(-1*limeController.calculate(horizontalOffset, 0)));
+          RightMaster.set(ControlMode.PercentOutput, filter.calculate(-1*limeController.calculate(horizontalOffset, 0)));
           hoodMotor.set(ControlMode.PercentOutput, 0);
           leftNeo.set(0);
         }else{
@@ -261,30 +257,19 @@ double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeig
           speed = xbox.getRawAxis(1) * xbox.getRawAxis(1) * .75;
           speed = (xbox.getRawAxis(1) < 0)?(speed * -1):speed;
           turn = .15 * xbox.getRawAxis(4);
-          LeftMaster.set(ControlMode.PercentOutput, -(speed+turn));
-          RightMaster.set(ControlMode.PercentOutput, (speed-turn));
+          LeftMaster.set(ControlMode.PercentOutput, filter.calculate(-(speed+turn)));
+          RightMaster.set(ControlMode.PercentOutput, filter.calculate((speed-turn)));
          }else if(xbox.getRawAxis(4) >= .1 || xbox.getRawAxis(4) <= -.1){
           turn = xbox.getRawAxis(4) * xbox.getRawAxis(4) * .65;
           turn = (xbox.getRawAxis(4) < 0)?(turn * -1):turn;
-          LeftMaster.set(ControlMode.PercentOutput, turn);
-          RightMaster.set(ControlMode.PercentOutput, turn);
+          LeftMaster.set(ControlMode.PercentOutput, filter.calculate(turn));
+          RightMaster.set(ControlMode.PercentOutput, filter.calculate(turn));
          }
          else{
            LeftMaster.set(ControlMode.PercentOutput, 0);
            RightMaster.set(ControlMode.PercentOutput, 0);
          }
-         if(leftEncoder.getRate() > leftMax){
-          leftMax  = leftEncoder.getRate();
-         }
-         if(rightEncoder.getRate() > rightMax){
-          rightMax = rightEncoder.getRate();
-         }
-    }
-    // if(xbox.getAButton()){
-    //   feed.set(ControlMode.PercentOutput, .5);
-    // }else{
-    //   feed.set(ControlMode.PercentOutput, 0);  
-    // }    
+    } 
   }
   @Override
   public void disabledInit() {}
@@ -298,9 +283,6 @@ double distanceFromLimelightToGoalInches = (goalHeightInches - limelightLensHeig
   public void simulationInit() {}
   @Override
   public void simulationPeriodic() {}
-  public double[] getTargetRPM(double distance){
-    return new double[]{0,0,0,0};
-  }
   public double FPSTORPM(double fps){
     return ((fps * 60 * 12)/3.14159)/4;
   }
